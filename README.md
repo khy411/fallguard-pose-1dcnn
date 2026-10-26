@@ -4,6 +4,9 @@ Privacy-first fall detection. A camera feed is turned into a pose skeleton on th
 
 **Live demo (runs fully in your browser):** https://khy411.github.io/fallguard-pose-1dcnn/
 
+**Video Demo** https://youtu.be/ZsE3G4HN5Dw?si=E_AL8oXF6wepe5D5
+
+
 ## The problem
 
 Falls are a leading cause of injury for older adults, and the worst outcomes often come from lying on the floor for a long time before anyone notices. Wearables get forgotten or left uncharged, and ordinary cameras are a hard sell in a bedroom or bathroom. FallGuard keeps the camera but throws away the picture: only skeleton keypoints are ever used.
