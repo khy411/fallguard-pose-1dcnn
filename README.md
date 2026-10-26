@@ -3,7 +3,6 @@
 Privacy-first fall detection. A camera feed is turned into a pose skeleton on the device, a small 1D-CNN decides whether the last two seconds of movement look like a fall, and an alert fires. No video is shown, stored, or sent.
 
 **Live demo (runs fully in your browser):** https://khy411.github.io/fallguard-pose-1dcnn/
-**Demo video:** to paste
 
 ## The problem
 
