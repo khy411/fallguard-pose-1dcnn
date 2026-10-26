@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FallGuard: fall detection without video</title>
+<meta name="description" content="Fall detection that turns the camera feed into a skeleton, right in your browser. No video is shown, saved, or sent.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Public+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#EAF0F3; --ink:#0F2433; --muted:#566F7D; --line:#C9D6DD;
+  --sea:#1B6F8A; --sea-dark:#14566B; --stage:#0B1A26; --stage-line:#1C3345; --alert:#FF5A5F;
+  --display:"Bricolage Grotesque","Trebuchet MS",system-ui,sans-serif;
+  --body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:400 16px/1.6 var(--body)}
+.wrap{max-width:1120px;margin:0 auto;padding:clamp(20px,4vw,52px)}
+.layout{display:grid;gap:clamp(24px,4vw,44px);grid-template-columns:minmax(0,1fr)}
+@media(min-width:920px){.layout{grid-template-columns:340px minmax(0,1fr);align-items:start}}
+
+h1{font:800 clamp(2.5rem,5vw,3.5rem)/1 var(--display);letter-spacing:-.03em;margin:0 0 14px}
+.lede{font:600 1.4rem/1.25 var(--display);letter-spacing:-.01em;margin:0 0 22px}
+.privacy{border-left:4px solid var(--sea);padding:2px 0 2px 16px;margin:0 0 26px;max-width:46ch}
+.privacy p{margin:0}
+.actions{display:flex;flex-wrap:wrap;gap:10px}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:0 22px;border-radius:999px;
+  font:600 1rem var(--body);cursor:pointer;border:2px solid var(--sea);transition:background .15s,color .15s}
+.btn.primary{background:var(--sea);color:#fff}
+.btn.primary:hover:not(:disabled){background:var(--sea-dark);border-color:var(--sea-dark)}
+.btn.secondary{background:transparent;color:var(--sea-dark)}
+.btn.secondary:hover{background:#fff}
+.btn:disabled{background:#CBD7DE;border-color:#CBD7DE;color:#6F8896;cursor:default}
+.btn:focus-visible,input:focus-visible+span{outline:3px solid var(--ink);outline-offset:3px}
+label.btn input{position:absolute;opacity:0;width:1px;height:1px}
+.status{display:flex;gap:10px;align-items:flex-start;margin:20px 0 0;color:var(--muted);font-size:.95rem;min-height:3em}
+.dot{flex:none;width:10px;height:10px;border-radius:50%;background:#9DB0BB;margin-top:.5em}
+.status[data-s=ready] .dot{background:#2FA37C}
+.status[data-s=live] .dot{background:var(--sea)}
+.status[data-s=error] .dot{background:var(--alert)}
+.tips{color:var(--muted);font-size:.92rem;margin:14px 0 0;max-width:46ch}
+
+.stage{position:relative;background:var(--stage);border-radius:20px;overflow:hidden;box-shadow:0 0 0 0 transparent;transition:box-shadow .2s}
+.stage.alert{box-shadow:0 0 0 4px var(--alert)}
+@media(prefers-reduced-motion:no-preference){.stage.alert{animation:ring 1.2s ease-out 2}}
+@keyframes ring{0%{box-shadow:0 0 0 0 rgba(255,90,95,.8)}100%{box-shadow:0 0 0 18px rgba(255,90,95,0)}}
+#view{display:block;width:100%;aspect-ratio:4/3;background:var(--stage)}
+.banner{position:absolute;left:0;right:0;top:0;display:none;background:var(--alert);color:#fff;font:800 1.35rem/1.2 var(--display);padding:14px 20px}
+.empty{position:absolute;left:0;right:0;top:0;aspect-ratio:4/3;display:grid;place-items:center;text-align:center;padding:24px;color:#8FB0C2;font-size:1.05rem}
+.empty p{margin:0;max-width:30ch}
+.strip{position:relative;border-top:1px solid var(--stage-line)}
+#chart{display:block;width:100%;height:96px}
+.strip span{position:absolute;font-size:.8rem;color:#7F9BAD}
+.strip .l1{left:14px;top:8px}
+.strip .l2{right:14px;top:8px}
+
+footer{margin-top:clamp(28px,5vw,52px);padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:.9rem;max-width:80ch}
+footer p{margin:0 0 6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="layout">
+    <section>
+      <h1>FallGuard</h1>
+      <p class="lede">Sees a fall, not a face.</p>
+      <div class="privacy">
+        <p>Your camera feed becomes a stick-figure skeleton inside this tab. The video is never shown, saved, or sent anywhere.</p>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="cam" disabled>Start webcam</button>
+        <label class="btn secondary"><input id="file" type="file" accept="video/*"><span>Analyze a clip</span></label>
+      </div>
+      <p class="status" id="st" data-s=""><i class="dot"></i><span id="stt">Loading models...</span></p>
+      <p class="tips">Stand a few meters back so your body is in view, then act out a fall onto a bed or cushions. Never a hard floor.</p>
+    </section>
+
+    <section>
+      <div class="stage" id="stage">
+        <canvas id="view" width="640" height="480"></canvas>
+        <div class="empty" id="empty"><p>Start the webcam or analyze a clip to see the skeleton here.</p></div>
+        <div class="banner" id="banner">Possible fall detected</div>
+        <div class="strip">
+          <canvas id="chart" width="640" height="96"></canvas>
+          <span class="l1">Fall probability</span><span class="l2">Alarm line</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <p>Pose tracking by MediaPipe. The fall classifier is a small 1D-CNN I trained on a public fall dataset (GMDCSA-24) and my own recordings, and it runs in your browser with ONNX Runtime Web.</p>
+    <p>Prototype for one person in view. It can miss falls and raise false alarms, and it is not a medical device.</p>
+  </footer>
+</div>
+
+<video id="v" playsinline muted style="position:absolute;width:1px;height:1px;opacity:0"></video>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.min.js"></script>
+<script type="module">
+import {PoseLandmarker,FilesetResolver,DrawingUtils} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm";
+import {WIN,FPS,N_FEAT,frameFeatures,toInput} from "./features.js";
+const THRESH=0.6, CONSEC=3, COOLDOWN=10000;
+const $=id=>document.getElementById(id);
+const v=$('v'), view=$('view'), ctx=view.getContext('2d'), cctx=$('chart').getContext('2d');
+const du=new DrawingUtils(ctx);
+const CW=640, CH=96;
+const status=(t,s='')=>{$('stt').textContent=t;$('st').dataset.s=s;};
+let landmarker, sess, running=false, buf=[], probs=[], hits=0, lastT=0, lastAlert=-1e9, prob=0, alertTimer;
+
+ort.env.wasm.numThreads=1;
+ort.env.wasm.wasmPaths="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/";
+async function makeLandmarker(delegate){
+  const fs=await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+  return PoseLandmarker.createFromOptions(fs,{baseOptions:{
+    modelAssetPath:"https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",
+    delegate},runningMode:"VIDEO",numPoses:1});
+}
+try{
+  try{landmarker=await makeLandmarker("GPU");}catch{landmarker=await makeLandmarker("CPU");}
+  sess=await ort.InferenceSession.create("fallnet.onnx");
+  status("Ready. Start the webcam or analyze a clip.","ready"); $('cam').disabled=false;
+}catch(e){status("Could not load the models: "+e.message+". Check your connection and reload.","error");}
+
+async function predict(){
+  const x=new ort.Tensor('float32',toInput(buf),[1,2*N_FEAT,WIN]);
+  const out=await sess.run({[sess.inputNames[0]]:x});
+  return 1/(1+Math.exp(-out[sess.outputNames[0]].data[0]));
+}
+function beep(){try{const a=new AudioContext(),o=a.createOscillator();o.frequency.value=880;o.connect(a.destination);o.start();setTimeout(()=>{o.stop();a.close()},700);}catch{}}
+function alarm(){
+  lastAlert=performance.now();
+  $('banner').style.display='block';$('stage').classList.add('alert');beep();
+  clearTimeout(alertTimer);
+  alertTimer=setTimeout(()=>{$('banner').style.display='none';$('stage').classList.remove('alert');},6000);
+}
+function drawChart(){
+  cctx.clearRect(0,0,CW,CH);
+  const ty=CH*(1-THRESH);
+  cctx.strokeStyle='#3A5A70';cctx.lineWidth=1;cctx.setLineDash([6,5]);
+  cctx.beginPath();cctx.moveTo(0,ty);cctx.lineTo(CW,ty);cctx.stroke();cctx.setLineDash([]);
+  cctx.strokeStyle='#FF7C80';cctx.lineWidth=2;cctx.beginPath();
+  probs.forEach((p,i)=>{const x=i*CW/150,y=CH-4-p*(CH-8);i?cctx.lineTo(x,y):cctx.moveTo(x,y);});
+  cctx.stroke();
+}
+async function loop(){
+  try{
+    if(v.readyState>=2&&v.videoWidth){
+      const w=v.videoWidth,h=v.videoHeight;
+      if(view.width!==w){view.width=w;view.height=h;}
+      const now=performance.now(), res=landmarker.detectForVideo(v,now);
+      ctx.fillStyle='#0B1A26';ctx.fillRect(0,0,w,h);   // privacy: the raw video is never drawn
+      if(res.landmarks.length){
+        const lm=res.landmarks[0];
+        du.drawConnectors(lm,PoseLandmarker.POSE_CONNECTIONS,{color:'#6CE5E8',lineWidth:3});
+        du.drawLandmarks(lm,{radius:3,color:'#EAF7FA'});
+        if(now-lastT>=1000/FPS){
+          lastT=now; buf.push(frameFeatures(lm,w,h)); if(buf.length>WIN)buf.shift();
+          if(buf.length===WIN){
+            prob=await predict(); probs.push(prob); if(probs.length>150)probs.shift(); drawChart();
+            hits=prob>THRESH?hits+1:0;
+            if(hits>=CONSEC&&now-lastAlert>COOLDOWN)alarm();
+          }
+        }
+      }
+      ctx.fillStyle=now-lastAlert<5000?'#FF7C80':'#6CE5E8';
+      ctx.font='600 '+Math.round(w/32)+'px "Public Sans",sans-serif';
+      ctx.fillText('Fall probability '+prob.toFixed(2),Math.round(w/50),Math.round(w/20));
+    }
+  }catch(e){status("Something went wrong: "+e.message,"error");}
+  requestAnimationFrame(loop);
+}
+function start(){
+  buf=[];probs=[];hits=0;prob=0;lastT=0;$('empty').style.display='none';drawChart();
+  if(!running){running=true;loop();}
+}
+function stopStream(){if(v.srcObject){v.srcObject.getTracks().forEach(t=>t.stop());v.srcObject=null;}}
+$('cam').onclick=async()=>{
+  try{stopStream();v.removeAttribute('src');
+    v.srcObject=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480}});
+    await v.play();start();status("Webcam is on. Nothing leaves your device.","live");
+  }catch(e){status("Webcam unavailable: "+e.message+". Allow camera access and try again.","error");}
+};
+$('file').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;stopStream();
+  try{v.src=URL.createObjectURL(f);await v.play();start();status("Analyzing the clip on your device.","live");}
+  catch(err){status("Could not play that file: "+err.message,"error");}
+};
+</script>
+</body>
+</html>

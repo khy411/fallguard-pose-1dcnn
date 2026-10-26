@@ -1,0 +1,7 @@
+mediapipe==0.10.14
+opencv-python
+numpy
+torch
+scikit-learn
+requests
+protobuf>=4.25.3,<5
